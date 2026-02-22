@@ -6,7 +6,6 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
-extern int settickets(int);
 
 int
 sys_fork(void)
@@ -91,11 +90,18 @@ sys_uptime(void)
   return xticks;
 }
 
+
 int
 sys_settickets(void)
 {
   int n;
+  
   if(argint(0, &n) < 0)
     return -1;
-  return settickets(n);
+  
+  if(n < 1)
+    return -1;
+  
+  myproc()->tickets = n;
+  return 0;
 }
