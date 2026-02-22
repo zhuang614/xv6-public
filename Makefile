@@ -182,7 +182,7 @@ UPROGS=\
 	_usertests\
 	_wc\
 	_zombie\
-	_lotteryshare\
+	_lotterytest\
 	_testlottery\
 
 fs.img: mkfs README $(UPROGS)
