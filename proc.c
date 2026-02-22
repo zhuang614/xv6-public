@@ -88,6 +88,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->tickets = 1; //initial lottery tickets
 
   release(&ptable.lock);
 
@@ -311,6 +312,15 @@ wait(void)
   }
 }
 
+static unsigned long randstate = 1;
+
+int
+random(void)
+{
+  randstate = randstate * 1664525 + 1013904223;
+  return randstate;
+}
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -320,6 +330,58 @@ wait(void)
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
 void
+scheduler(void)
+{
+  struct proc *p;
+  struct cpu *c = mycpu();
+  c->proc = 0;
+
+  for(;;){
+    sti();
+    acquire(&ptable.lock);
+
+    int total = 0;
+
+    // Step 1: compute total tickets of RUNNABLE processes
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state == RUNNABLE)
+        total += p->tickets;
+    }
+
+    if(total > 0){
+
+      // Step 2: pick winner in [0, total)
+      int winner = random() % total;
+
+      int running_sum = 0;
+
+      // Step 3: find winning process
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->state != RUNNABLE)
+          continue;
+
+        running_sum += p->tickets;
+
+        if(running_sum > winner){
+
+          // Step 4: run winner
+          c->proc = p;
+          switchuvm(p);
+          p->state = RUNNING;
+
+          swtch(&(c->scheduler), p->context);
+          switchkvm();
+
+          c->proc = 0;
+          break;
+        }
+      }
+    }
+
+    release(&ptable.lock);
+  }
+}
+/*void
 scheduler(void)
 {
   struct proc *p;
@@ -353,7 +415,7 @@ scheduler(void)
     release(&ptable.lock);
 
   }
-}
+}*/
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
