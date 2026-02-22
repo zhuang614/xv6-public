@@ -20,6 +20,16 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+// Simple LCG for generating random numbers
+static unsigned long next = 1;
+
+int
+rand(void)
+{
+  next = next * 1103515245 + 12345;
+  return (unsigned int)(next / 65536) % 32768;
+}
+
 void
 pinit(void)
 {
@@ -200,6 +210,7 @@ fork(void)
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
+  np->tickets = curproc->tickets;
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
@@ -335,87 +346,40 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
-
+  
   for(;;){
     sti();
+
     acquire(&ptable.lock);
-
-    int total = 0;
-
-    // Step 1: compute total tickets of RUNNABLE processes
+    
+    int total_tickets = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state == RUNNABLE)
-        total += p->tickets;
+        total_tickets += p->tickets;
     }
 
-    if(total > 0){
-
-      // Step 2: pick winner in [0, total)
-      int winner = random() % total;
-
+    if(total_tickets > 0){
+      int winner = rand() % total_tickets;
       int running_sum = 0;
-
-      // Step 3: find winning process
       for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
         if(p->state != RUNNABLE)
           continue;
 
         running_sum += p->tickets;
-
         if(running_sum > winner){
-
-          // Step 4: run winner
           c->proc = p;
           switchuvm(p);
           p->state = RUNNING;
-
           swtch(&(c->scheduler), p->context);
           switchkvm();
-
           c->proc = 0;
           break;
         }
       }
     }
-
     release(&ptable.lock);
   }
 }
-/*void
-scheduler(void)
-{
-  struct proc *p;
-  struct cpu *c = mycpu();
-  c->proc = 0;
-  
-  for(;;){
-    // Enable interrupts on this processor.
-    sti();
-
-    // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
-
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
-    }
-    release(&ptable.lock);
-
-  }
-}*/
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
@@ -593,4 +557,17 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+int
+settickets(int n)
+{
+  if (n < 1)
+    return -1;
+
+  acquire(&ptable.lock);
+  myproc()->tickets = n;
+  release(&ptable.lock);
+  
+  return 0;
 }

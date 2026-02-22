@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+extern int settickets(int);
 
 int
 sys_fork(void)
@@ -94,17 +95,7 @@ int
 sys_settickets(void)
 {
   int n;
-
-  // Get argument from user
   if(argint(0, &n) < 0)
     return -1;
-
-  // Must be >= 1
-  if(n < 1)
-    return -1;
-
-  struct proc *p = myproc();
-  p->tickets = n;
-
-  return 0;
+  return settickets(n);
 }
